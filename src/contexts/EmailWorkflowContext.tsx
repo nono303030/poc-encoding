@@ -27,6 +27,9 @@ interface EmailWorkflowContextType extends EmailWorkflowState {
   setSelectedTags: (tags: string[]) => void;
   getStepStatus: (step: WorkflowStep) => 'pending' | 'current' | 'complete';
   canProceed: () => boolean;
+  resetWorkflow: () => void;
+  updateImage: (id: string, updates: Partial<ImageAsset>) => void;
+  updateValidation: (id: string, status: ValidationItem['status']) => void;
 }
 
 const defaultValidations: ValidationItem[] = [
@@ -91,9 +94,21 @@ export function EmailWorkflowProvider({ children }: { children: ReactNode }) {
   const [userConfirmed, setUserConfirmed] = useState(false);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
-  const [validations] = useState<ValidationItem[]>(defaultValidations);
-  const [images] = useState<ImageAsset[]>(defaultImages);
+  const [validations, setValidations] = useState<ValidationItem[]>(defaultValidations);
+  const [images, setImages] = useState<ImageAsset[]>(defaultImages);
   const [contentBlocks] = useState<ContentBlock[]>(defaultContentBlocks);
+
+  const updateImage = (id: string, updates: Partial<ImageAsset>) => {
+    setImages(prev => prev.map(img =>
+      img.id === id ? { ...img, ...updates } : img
+    ));
+  };
+
+  const updateValidation = (id: string, status: ValidationItem['status']) => {
+    setValidations(prev => prev.map(v =>
+      v.id === id ? { ...v, status } : v
+    ));
+  };
 
   const getEmailStatus = (): EmailStatus => {
     const hasErrors = images.some(img => img.status === 'too-heavy');
@@ -132,6 +147,18 @@ export function EmailWorkflowProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const resetWorkflow = () => {
+    setCurrentStep('metadata');
+    setProjectName('Spring Campaign - March 2026'); // Reset to default or empty? Maybe empty is better, but keeping consistent with init.
+    setContentImported(false);
+    setUserConfirmed(false);
+    setSelectedTags([]);
+    setImages(defaultImages); // Reset images to default on new workflow
+    setValidations(defaultValidations);
+    // Resetting complex objects to defaults
+    // In a real app we might want to deep copy defaults or use a reducer
+  };
+
   return (
     <EmailWorkflowContext.Provider
       value={{
@@ -151,6 +178,9 @@ export function EmailWorkflowProvider({ children }: { children: ReactNode }) {
         setSelectedTags,
         getStepStatus,
         canProceed,
+        resetWorkflow,
+        updateImage,
+        updateValidation,
       }}
     >
       {children}

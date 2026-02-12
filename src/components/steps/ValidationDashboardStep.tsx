@@ -1,7 +1,8 @@
-import { 
-  CheckCircle2, 
-  AlertTriangle, 
-  XCircle, 
+import React from 'react';
+import {
+  CheckCircle2,
+  AlertTriangle,
+  XCircle,
   Link,
   Code,
   FileCheck,
@@ -92,13 +93,70 @@ const statusColors = {
 };
 
 export function ValidationDashboardStep() {
-  const { emailStatus, setCurrentStep } = useEmailWorkflow();
+  const { emailStatus, setCurrentStep, validations, images, updateValidation } = useEmailWorkflow();
 
-  const passCount = validationChecks.filter(c => c.status === 'pass').length;
-  const warningCount = validationChecks.filter(c => c.status === 'warning').length;
-  const errorCount = validationChecks.filter(c => c.status === 'error').length;
+  const [isChecking, setIsChecking] = React.useState(true);
 
-  const canProceed = errorCount === 0;
+  React.useEffect(() => {
+    // Simulate running checks on mount
+    const timer = setTimeout(() => {
+      // 1. Check Images (Real logic based on context)
+      const hasHeavyImages = images.some(i => i.status === 'too-heavy');
+      const hasMissingAlt = images.some(i => i.status === 'missing-alt');
+
+      if (hasHeavyImages) {
+        updateValidation('images', 'error');
+      } else if (hasMissingAlt) {
+        updateValidation('images', 'warning');
+      } else {
+        updateValidation('images', 'pass');
+      }
+
+      // 2. Mock other checks for demo purposes
+      updateValidation('links', 'pass');
+      updateValidation('tracking', 'pass');
+      updateValidation('blocks', 'pass');
+      updateValidation('weight', 'warning'); // Always warn for demo
+      updateValidation('alt-text', hasMissingAlt ? 'warning' : 'pass');
+
+      setIsChecking(false);
+    }, 1500); // 1.5s delay for effect
+
+    return () => clearTimeout(timer);
+  }, []); // Run once on mount
+
+  const passCount = validations.filter(c => c.status === 'pass').length;
+  const warningCount = validations.filter(c => c.status === 'warning').length;
+  const errorCount = validations.filter(c => c.status === 'error').length;
+  const pendingCount = validations.filter(c => c.status === 'pending').length;
+
+  const canProceed = errorCount === 0 && pendingCount === 0;
+
+  const handleReRun = () => {
+    setIsChecking(true);
+    // Reset to pending visual
+    validations.forEach(v => updateValidation(v.id, 'pending'));
+    // Re-trigger effect by unmounting/remounting or just duplicated logic. 
+    // Ideally extract logic, but for now simple reload simulation:
+    setTimeout(() => {
+      window.location.reload(); // Simple way to reset state for demo, or we could extract the effect logic. 
+      // Better: just reset state and let effect run if we added dependency, but empty dependency means mount only.
+      // Let's just re-run the logic:
+      const hasHeavyImages = images.some(i => i.status === 'too-heavy');
+      const hasMissingAlt = images.some(i => i.status === 'missing-alt');
+
+      if (hasHeavyImages) updateValidation('images', 'error');
+      else if (hasMissingAlt) updateValidation('images', 'warning');
+      else updateValidation('images', 'pass');
+
+      updateValidation('links', 'pass');
+      updateValidation('tracking', 'pass');
+      updateValidation('blocks', 'pass');
+      updateValidation('weight', 'warning');
+      updateValidation('alt-text', hasMissingAlt ? 'warning' : 'pass');
+      setIsChecking(false);
+    }, 1000);
+  };
 
   return (
     <div className="p-8">
@@ -113,64 +171,80 @@ export function ValidationDashboardStep() {
 
         {/* Overall Status Card */}
         <Card className={cn(
-          "p-6 mb-8 border-2",
-          emailStatus === 'ready' && "border-success/50 bg-success-muted",
-          emailStatus === 'attention' && "border-warning/50 bg-warning-muted",
-          emailStatus === 'blocking' && "border-destructive/50 bg-destructive-muted"
+          "p-6 mb-8 border-2 transition-all duration-500",
+          isChecking && "border-primary/20 bg-primary/5",
+          !isChecking && emailStatus === 'ready' && "border-success/50 bg-success-muted",
+          !isChecking && emailStatus === 'attention' && "border-warning/50 bg-warning-muted",
+          !isChecking && emailStatus === 'blocking' && "border-destructive/50 bg-destructive-muted"
         )}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <div className={cn(
-                "w-16 h-16 rounded-full flex items-center justify-center",
-                emailStatus === 'ready' && "bg-success/20",
-                emailStatus === 'attention' && "bg-warning/20",
-                emailStatus === 'blocking' && "bg-destructive/20"
+                "w-16 h-16 rounded-full flex items-center justify-center transition-all",
+                isChecking && "bg-primary/10",
+                !isChecking && emailStatus === 'ready' && "bg-success/20",
+                !isChecking && emailStatus === 'attention' && "bg-warning/20",
+                !isChecking && emailStatus === 'blocking' && "bg-destructive/20"
               )}>
-                {emailStatus === 'ready' && <CheckCircle2 className="w-8 h-8 text-success" />}
-                {emailStatus === 'attention' && <AlertTriangle className="w-8 h-8 text-warning" />}
-                {emailStatus === 'blocking' && <XCircle className="w-8 h-8 text-destructive" />}
+                {isChecking ? (
+                  <RefreshCw className="w-8 h-8 text-primary animate-spin" />
+                ) : (
+                  <>
+                    {emailStatus === 'ready' && <CheckCircle2 className="w-8 h-8 text-success" />}
+                    {emailStatus === 'attention' && <AlertTriangle className="w-8 h-8 text-warning" />}
+                    {emailStatus === 'blocking' && <XCircle className="w-8 h-8 text-destructive" />}
+                  </>
+                )}
               </div>
               <div>
                 <h3 className="text-xl font-semibold text-foreground">
-                  {emailStatus === 'ready' && 'Ready to Send'}
-                  {emailStatus === 'attention' && 'Attention Needed'}
-                  {emailStatus === 'blocking' && 'Blocking Issues Found'}
+                  {isChecking ? 'Running System Checks...' : (
+                    <>
+                      {emailStatus === 'ready' && 'Ready to Send'}
+                      {emailStatus === 'attention' && 'Attention Needed'}
+                      {emailStatus === 'blocking' && 'Blocking Issues Found'}
+                    </>
+                  )}
                 </h3>
                 <p className="text-muted-foreground">
-                  {passCount} passed • {warningCount} warnings • {errorCount} errors
+                  {isChecking ? 'Please wait while we verify your email content.' : (
+                    `${passCount} passed • ${warningCount} warnings • ${errorCount} errors`
+                  )}
                 </p>
               </div>
             </div>
-            
-            <StatusBadgeMuted status={emailStatus} size="lg" />
+
+            {!isChecking && <StatusBadgeMuted status={emailStatus} size="lg" />}
           </div>
         </Card>
 
         {/* Validation Checks */}
         <div className="space-y-3 mb-8">
           <h3 className="font-medium text-foreground mb-4">Validation Checklist</h3>
-          
-          {validationChecks.map((check) => {
+
+          {validations.map((check) => {
             const StatusIcon = statusIcons[check.status];
-            const Icon = check.icon;
+            const originalCheckConfig = validationChecks.find(c => c.id === check.id);
+            const Icon = originalCheckConfig?.icon || FileCheck; // Fallback icon
 
             return (
-              <Card 
+              <Card
                 key={check.id}
                 className={cn(
-                  "p-4 transition-all",
+                  "p-4 transition-all duration-300",
                   check.status === 'pass' && "border-success/20 hover:border-success/40",
                   check.status === 'warning' && "border-warning/20 hover:border-warning/40",
-                  check.status === 'error' && "border-destructive/20 hover:border-destructive/40"
+                  check.status === 'error' && "border-destructive/20 hover:border-destructive/40",
+                  check.status === 'pending' && "border-muted hover:border-border"
                 )}
               >
                 <div className="flex items-start gap-4">
                   {/* Status Icon */}
                   <div className={cn(
-                    "w-6 h-6 shrink-0 flex items-center justify-center",
+                    "w-6 h-6 shrink-0 flex items-center justify-center transition-colors",
                     statusColors[check.status]
                   )}>
-                    <StatusIcon className="w-5 h-5" />
+                    <StatusIcon className={cn("w-5 h-5", check.status === 'pending' && "animate-spin")} />
                   </div>
 
                   {/* Content */}
@@ -179,25 +253,24 @@ export function ValidationDashboardStep() {
                       <Icon className="w-4 h-4 text-muted-foreground" />
                       <h4 className="font-medium text-foreground">{check.label}</h4>
                     </div>
-                    <p className="text-sm text-muted-foreground">{check.description}</p>
-                    {check.details && (
-                      <p className={cn(
-                        "text-xs mt-2",
-                        check.status === 'pass' && "text-success",
-                        check.status === 'warning' && "text-warning",
-                        check.status === 'error' && "text-destructive"
-                      )}>
-                        {check.details}
-                      </p>
-                    )}
+                    {/* We might want to use the description from the static config if needed, or just label */}
+                    <p className="text-sm text-muted-foreground">
+                      {originalCheckConfig?.description}
+                    </p>
                   </div>
 
                   {/* Action */}
-                  {check.status !== 'pass' && (
-                    <Button 
-                      variant="ghost" 
+                  {check.status === 'error' && (
+                    <Button
+                      variant="ghost"
                       size="sm"
                       className="shrink-0"
+                      onClick={() => {
+                        // For demo, if it's image error, go to image step
+                        if (check.id === 'images' || check.id === 'alt-text') {
+                          setCurrentStep('images');
+                        }
+                      }}
                     >
                       Fix Issue
                     </Button>
@@ -213,24 +286,25 @@ export function ValidationDashboardStep() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-foreground font-medium">
-                {canProceed 
-                  ? 'All blocking issues resolved. You can proceed to confirmation.'
-                  : 'Please resolve all blocking issues before proceeding.'
-                }
+                {isChecking ? 'Validating...' : (
+                  canProceed
+                    ? 'All blocking issues resolved. You can proceed to confirmation.'
+                    : 'Please resolve all blocking issues before proceeding.'
+                )}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                Last checked: Just now
+                Last checked: {isChecking ? 'Running...' : 'Just now'}
               </p>
             </div>
 
             <div className="flex items-center gap-3">
-              <Button variant="outline" size="sm">
-                <RefreshCw className="w-4 h-4 mr-2" />
+              <Button variant="outline" size="sm" onClick={handleReRun} disabled={isChecking}>
+                <RefreshCw className={cn("w-4 h-4 mr-2", isChecking && "animate-spin")} />
                 Re-run Checks
               </Button>
-              <Button 
+              <Button
                 onClick={() => setCurrentStep('confirm')}
-                disabled={!canProceed}
+                disabled={!canProceed || isChecking}
               >
                 {canProceed ? (
                   <>

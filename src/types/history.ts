@@ -31,4 +31,4 @@ export interface Tag {
   categoryId: string;
 }
 
-export type MainView = 'workflow' | 'history' | 'tagging';
+export type MainView = 'workflow' | 'history' | 'tagging' | 'criteria' | 'security' | 'ai-workflow';

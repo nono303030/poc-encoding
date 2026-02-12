@@ -5,11 +5,16 @@ import { EmailWorkflowProvider } from '@/contexts/EmailWorkflowContext';
 import { AppNavigationProvider, useAppNavigation } from '@/contexts/AppNavigationContext';
 import { HistoryTab } from '@/components/tabs/HistoryTab';
 import { TaggingPlanTab } from '@/components/tabs/TaggingPlanTab';
+import { CriteriaDefinitionTab } from '@/components/tabs/CriteriaDefinitionTab';
 import { AppDataProvider } from '@/contexts/AppDataContext';
 
 interface AppLayoutProps {
   children: ReactNode;
 }
+
+import { SecurityRolesTab } from '../tabs/SecurityRolesTab';
+import { AIWorkflowView } from '../ai-steps/AIWorkflowView';
+import { AIWorkflowProvider } from '@/contexts/AIWorkflowContext';
 
 function MainContent({ children }: { children: ReactNode }) {
   const { currentView } = useAppNavigation();
@@ -20,6 +25,18 @@ function MainContent({ children }: { children: ReactNode }) {
 
   if (currentView === 'tagging') {
     return <TaggingPlanTab />;
+  }
+
+  if (currentView === 'criteria') {
+    return <CriteriaDefinitionTab />;
+  }
+
+  if (currentView === 'security') {
+    return <SecurityRolesTab />;
+  }
+
+  if (currentView === 'ai-workflow') {
+    return <AIWorkflowView />;
   }
 
   return <>{children}</>;
@@ -47,7 +64,9 @@ export function AppLayout({ children }: AppLayoutProps) {
     <AppNavigationProvider>
       <EmailWorkflowProvider>
         <AppDataProvider>
-          <LayoutContent>{children}</LayoutContent>
+          <AIWorkflowProvider>
+            <LayoutContent>{children}</LayoutContent>
+          </AIWorkflowProvider>
         </AppDataProvider>
       </EmailWorkflowProvider>
     </AppNavigationProvider>

@@ -1,7 +1,7 @@
-import { 
-  Image as ImageIcon, 
-  CheckCircle2, 
-  AlertTriangle, 
+import {
+  Image as ImageIcon,
+  CheckCircle2,
+  AlertTriangle,
   XCircle,
   Download,
   Pencil,
@@ -43,11 +43,28 @@ const statusConfig = {
 
 interface ImageCardProps {
   image: ImageAsset;
+  onUpdate: (id: string, updates: Partial<ImageAsset>) => void;
 }
 
-function ImageCard({ image }: ImageCardProps) {
+function ImageCard({ image, onUpdate }: ImageCardProps) {
   const config = statusConfig[image.status];
   const StatusIcon = config.icon;
+
+  const handleOptimize = () => {
+    // Simulate optimization taking 500ms
+    // For now direct update
+    onUpdate(image.id, {
+      status: 'valid',
+      sizeKb: Math.round(image.sizeKb * 0.6) // Simulate 40% reduction
+    });
+  };
+
+  const handleFixAltText = () => {
+    onUpdate(image.id, {
+      status: 'valid',
+      altText: image.name.split('.')[0].replace(/-/g, ' ') // Use filename as default
+    });
+  };
 
   return (
     <Card className={cn(
@@ -58,12 +75,12 @@ function ImageCard({ image }: ImageCardProps) {
     )}>
       {/* Image Preview */}
       <div className="aspect-video bg-muted relative">
-        <img 
-          src={image.url} 
+        <img
+          src={image.url}
           alt={image.altText || image.name}
           className="w-full h-full object-cover"
         />
-        
+
         {/* Status Badge */}
         <div className={cn(
           "absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium",
@@ -108,19 +125,19 @@ function ImageCard({ image }: ImageCardProps) {
 
         {/* Actions based on status */}
         {image.status === 'too-heavy' && (
-          <Button size="sm" className="w-full" variant="outline">
+          <Button size="sm" className="w-full" variant="outline" onClick={handleOptimize}>
             <RefreshCw className="w-3.5 h-3.5 mr-2" />
             Optimize Image
           </Button>
         )}
-        
+
         {image.status === 'missing-alt' && (
-          <Button size="sm" className="w-full" variant="outline">
+          <Button size="sm" className="w-full" variant="outline" onClick={handleFixAltText}>
             <Pencil className="w-3.5 h-3.5 mr-2" />
             Add Alt Text
           </Button>
         )}
-        
+
         {image.status === 'valid' && (
           <div className="flex items-center gap-1 text-xs text-success">
             <CheckCircle2 className="w-3.5 h-3.5" />
@@ -133,11 +150,28 @@ function ImageCard({ image }: ImageCardProps) {
 }
 
 export function ImageManagementStep() {
-  const { images, setCurrentStep } = useEmailWorkflow();
+  const { images, setCurrentStep, updateImage } = useEmailWorkflow();
 
   const validCount = images.filter(i => i.status === 'valid').length;
   const warningCount = images.filter(i => i.status === 'missing-alt' || i.status === 'wrong-size').length;
   const errorCount = images.filter(i => i.status === 'too-heavy').length;
+
+  const handleOptimizeAll = () => {
+    // Find all images that need optimization or fix
+    images.forEach(img => {
+      if (img.status === 'too-heavy') {
+        updateImage(img.id, {
+          status: 'valid',
+          sizeKb: Math.round(img.sizeKb * 0.6)
+        });
+      } else if (img.status === 'missing-alt') {
+        updateImage(img.id, {
+          status: 'valid',
+          altText: img.name.split('.')[0].replace(/-/g, ' ')
+        });
+      }
+    });
+  };
 
   return (
     <div className="p-8">
@@ -146,7 +180,7 @@ export function ImageManagementStep() {
         <div className="mb-8">
           <h2 className="text-2xl font-semibold text-foreground mb-2">Image Management</h2>
           <p className="text-muted-foreground">
-            Review and optimize all images in your email. Each image must meet size 
+            Review and optimize all images in your email. Each image must meet size
             and accessibility requirements.
           </p>
         </div>
@@ -174,7 +208,7 @@ export function ImageManagementStep() {
             </div>
 
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" onClick={handleOptimizeAll}>
                 <Download className="w-4 h-4 mr-2" />
                 Optimize All
               </Button>
@@ -189,7 +223,7 @@ export function ImageManagementStep() {
         {/* Image Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
           {images.map((image) => (
-            <ImageCard key={image.id} image={image} />
+            <ImageCard key={image.id} image={image} onUpdate={updateImage} />
           ))}
         </div>
 
@@ -209,8 +243,8 @@ export function ImageManagementStep() {
           <Button variant="ghost" onClick={() => setCurrentStep('structure')}>
             Back to Structure
           </Button>
-          
-          <Button 
+
+          <Button
             onClick={() => setCurrentStep('validation')}
             disabled={errorCount > 0}
           >

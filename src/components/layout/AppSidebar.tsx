@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Button } from '@/components/ui/button';
 import {
   FileText,
   LayoutTemplate,
@@ -11,7 +12,9 @@ import {
   ChevronRight,
   ChevronDown,
   FolderOpen,
-  Upload
+  Upload,
+  Users,
+  Sparkles
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useEmailWorkflow } from '@/contexts/EmailWorkflowContext';
@@ -44,13 +47,15 @@ const steps: StepItem[] = [
 
 const mainNavItems: MainNavItem[] = [
   { id: 'history', label: 'All Emails', icon: History },
+  { id: 'criteria', label: 'Criteria Definition', icon: CheckSquare },
   { id: 'tagging', label: 'Tagging Plan', icon: Tags },
+  { id: 'security', label: 'Security & Roles', icon: Users },
 ];
 
 export function AppSidebar() {
-  const { currentStep, setCurrentStep, getStepStatus, projectName } = useEmailWorkflow();
+  const { currentStep, setCurrentStep, getStepStatus, projectName, resetWorkflow } = useEmailWorkflow();
   const { currentView, setCurrentView } = useAppNavigation();
-  const { categories, setFilter, activeFilter } = useAppData();
+  const { categories, setFilter, activeFilter, toggleTagFilter, resetFilters } = useAppData();
 
   // Local state for expanded folders (default all open for now, or could store in local storage)
   const [expandedCategories, setExpandedCategories] = useState<string[]>(['1', '2']);
@@ -58,12 +63,12 @@ export function AppSidebar() {
   const handleNavClick = (view: MainView) => {
     setCurrentView(view);
     if (view === 'history') {
-      setFilter({ type: 'all', value: '' }); // Clear filter when clicking "All Emails"
+      resetFilters(); // Clear filter when clicking "All Emails"
     }
   };
 
   const handleTagClick = (tagName: string) => {
-    setFilter({ type: 'tag', value: tagName });
+    toggleTagFilter(tagName);
     setCurrentView('history');
   };
 
@@ -98,44 +103,80 @@ export function AppSidebar() {
       <nav className="flex-1 overflow-y-auto py-4">
         {/* Workflow Steps */}
         <div className="px-4 mb-6">
-          <p className="text-xs font-medium text-sidebar-muted uppercase tracking-wider mb-3">
-            Current Workflow
-          </p>
-          <ul className="space-y-1">
-            {steps.map((step, index) => {
-              const status = getStepStatus(step.id);
-              const isClickable = status === 'complete' || status === 'current';
-              const isActive = currentView === 'workflow' && status === 'current';
+          <Button
+            className="w-full mb-3 gap-2 font-semibold shadow-md bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90"
+            size="lg"
+            onClick={() => {
+              setCurrentView('workflow');
+              setCurrentStep('metadata');
+            }}
+          >
+            <Send className="w-4 h-4" />
+            Encoder un email
+          </Button>
 
-              return (
-                <li key={step.id}>
-                  <button
-                    onClick={() => handleStepClick(step.id, isClickable)}
-                    disabled={!isClickable}
-                    className={cn(
-                      "w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all text-left",
-                      isActive && "bg-sidebar-accent text-sidebar-accent-foreground",
-                      status === 'complete' && "text-sidebar-foreground hover:bg-sidebar-accent/50 cursor-pointer",
-                      status === 'current' && !isActive && "text-sidebar-foreground hover:bg-sidebar-accent/50 cursor-pointer",
-                      status === 'pending' && "text-sidebar-muted cursor-not-allowed opacity-60"
-                    )}
-                  >
-                    <div
+          <Button
+            className="w-full mb-6 gap-2 font-semibold shadow-sm border-2 border-purple-500/30 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 hover:text-purple-300"
+            size="lg"
+            variant="outline"
+            onClick={() => setCurrentView('ai-workflow')}
+          >
+            <Sparkles className="w-4 h-4" />
+            ✨ AI Mode
+          </Button>
+
+          <div className="relative pl-2">
+            {/* Connecting Line */}
+            <div className="absolute left-[29px] top-4 bottom-4 w-0.5 bg-sidebar-primary/20" />
+
+            <ul className="space-y-4 relative">
+              {steps.map((step, index) => {
+                const status = getStepStatus(step.id);
+                const isClickable = status === 'complete' || status === 'current';
+                const isActive = currentView === 'workflow' && status === 'current';
+
+                return (
+                  <li key={step.id}>
+                    <button
+                      onClick={() => handleStepClick(step.id, isClickable)}
+                      disabled={!isClickable}
                       className={cn(
-                        "w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-medium shrink-0 transition-all",
-                        status === 'complete' && "bg-emerald-500/20 text-emerald-600",
-                        status === 'current' && "bg-sidebar-primary text-sidebar-primary-foreground ring-2 ring-sidebar-primary/30",
-                        status === 'pending' && "bg-sidebar-border text-sidebar-muted"
+                        "w-full flex items-center gap-3 group text-left",
+                        !isClickable && "cursor-not-allowed"
                       )}
                     >
-                      {status === 'complete' ? <Check className="w-3 h-3" /> : index + 1}
-                    </div>
-                    <span className="text-sm font-medium">{step.label}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+                      <div
+                        className={cn(
+                          "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 transition-all z-10 border-2",
+                          status === 'complete'
+                            ? "bg-emerald-600 border-emerald-600 text-white"
+                            : isActive
+                              ? "bg-sidebar-primary border-sidebar-primary text-sidebar-primary-foreground shadow-sm scale-110"
+                              : "bg-sidebar-accent border-sidebar-accent/50 text-sidebar-muted"
+                        )}
+                      >
+                        {status === 'complete' ? <Check className="w-4 h-4" /> : index + 1}
+                      </div>
+                      <div className="flex flex-col">
+                        <span className={cn(
+                          "text-sm font-medium leading-none transition-colors",
+                          isActive ? "text-sidebar-primary" : "text-sidebar-foreground/80",
+                          !isClickable && !isActive && status === 'pending' && "text-sidebar-muted"
+                        )}>
+                          {step.label}
+                        </span>
+                        {isActive && (
+                          <span className="text-[10px] text-muted-foreground mt-1 font-medium text-sidebar-primary/80">
+                            En cours
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         </div>
 
         {/* Management & Tag Library */}
@@ -149,7 +190,7 @@ export function AppSidebar() {
             {mainNavItems.map((item) => {
               const Icon = item.icon;
               // Active if view matches AND filter is empty (for History)
-              const isActive = currentView === item.id && (item.id !== 'history' || activeFilter.type === 'all');
+              const isActive = currentView === item.id && (item.id !== 'history' || (activeFilter.tags.length === 0 && activeFilter.status.length === 0));
 
               return (
                 <li key={item.id}>
@@ -170,71 +211,7 @@ export function AppSidebar() {
             })}
           </ul>
 
-          {/* Smart Folders / Tag Tree */}
-          <p className="text-xs font-medium text-sidebar-muted uppercase tracking-wider mb-2 mt-6">
-            Smart Folders
-          </p>
-          <div className="space-y-1">
-            {categories.map((category) => (
-              <Collapsible
-                key={category.id}
-                open={expandedCategories.includes(category.id)}
-                onOpenChange={() => setExpandedCategories(prev =>
-                  prev.includes(category.id) ? prev : [...prev, category.id]
-                )}
-              >
-                <div className="flex items-center group">
-                  <button
-                    onClick={(e) => toggleCategory(category.id, e)}
-                    className="p-1 hover:bg-sidebar-accent/50 rounded mr-1 text-sidebar-muted"
-                  >
-                    {expandedCategories.includes(category.id) ? (
-                      <ChevronDown className="w-3 h-3" />
-                    ) : (
-                      <ChevronRight className="w-3 h-3" />
-                    )}
-                  </button>
-                  <div className="flex items-center gap-2 flex-1 py-1.5 px-2 rounded-lg text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent/30 cursor-pointer select-none"
-                    onClick={(e) => toggleCategory(category.id, e)}
-                  >
-                    <FolderOpen className="w-4 h-4" style={{ color: category.color }} />
-                    <span className="truncate">{category.name}</span>
-                  </div>
-                </div>
 
-                <CollapsibleContent className="pl-6 border-l border-sidebar-border/50 ml-2.5">
-                  <div className="pt-1 pb-1 space-y-0.5">
-                    {category.tags.length === 0 ? (
-                      <p className="text-xs text-sidebar-muted px-2 py-1 italic">Empty</p>
-                    ) : (
-                      category.tags.map((tag) => {
-                        const isFiltered = activeFilter.type === 'tag' && activeFilter.value === tag.name;
-                        return (
-                          <button
-                            key={tag.id}
-                            onClick={() => handleTagClick(tag.name)}
-                            className={cn(
-                              "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors text-left",
-                              isFiltered
-                                ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                                : "text-sidebar-muted hover:text-sidebar-foreground hover:bg-sidebar-accent/30"
-                            )}
-                          >
-                            <span
-                              className="w-1.5 h-1.5 rounded-full shrink-0"
-                              style={{ backgroundColor: category.color }}
-                            />
-                            <span className="truncate">{tag.name}</span>
-                            <span className="ml-auto text-xs opacity-50">{tag.usageCount}</span>
-                          </button>
-                        );
-                      })
-                    )}
-                  </div>
-                </CollapsibleContent>
-              </Collapsible>
-            ))}
-          </div>
         </div>
       </nav>
 

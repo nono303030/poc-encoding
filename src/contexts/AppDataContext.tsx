@@ -1,9 +1,10 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { TagCategory, EmailHistoryItem, Tag } from '@/types/history';
+import { TagCategory, EmailHistoryItem, Tag, EmailHistoryStatus } from '@/types/history';
 
 interface FilterState {
-    type: 'tag' | 'status' | 'all';
-    value: string;
+    tags: string[];
+    status: EmailHistoryStatus[];
+    search: string;
 }
 
 interface AppDataContextType {
@@ -11,6 +12,9 @@ interface AppDataContextType {
     emails: EmailHistoryItem[];
     activeFilter: FilterState;
     setFilter: (filter: FilterState) => void;
+    toggleTagFilter: (tagName: string) => void;
+    toggleStatusFilter: (status: EmailHistoryStatus) => void;
+    resetFilters: () => void;
     // Actions for Categories
     addCategory: (category: TagCategory) => void;
     updateCategory: (category: TagCategory) => void;
@@ -156,7 +160,11 @@ const INITIAL_EMAILS: EmailHistoryItem[] = [
 export function AppDataProvider({ children }: { children: ReactNode }) {
     const [categories, setCategories] = useState<TagCategory[]>(INITIAL_CATEGORIES);
     const [emails, setEmails] = useState<EmailHistoryItem[]>(INITIAL_EMAILS);
-    const [activeFilter, setActiveFilter] = useState<FilterState>({ type: 'all', value: '' });
+    const [activeFilter, setActiveFilter] = useState<FilterState>({
+        tags: [],
+        status: [],
+        search: ''
+    });
 
     // Categories Actions
     const addCategory = (category: TagCategory) => {
@@ -196,12 +204,41 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         ));
     };
 
+    const toggleTagFilter = (tagName: string) => {
+        setActiveFilter(prev => {
+            const currentTags = prev.tags;
+            if (currentTags.includes(tagName)) {
+                return { ...prev, tags: currentTags.filter(t => t !== tagName) };
+            } else {
+                return { ...prev, tags: [...currentTags, tagName] };
+            }
+        });
+    };
+
+    const toggleStatusFilter = (status: EmailHistoryStatus) => {
+        setActiveFilter(prev => {
+            const currentStatus = prev.status;
+            if (currentStatus.includes(status)) {
+                return { ...prev, status: currentStatus.filter(s => s !== status) };
+            } else {
+                return { ...prev, status: [...currentStatus, status] };
+            }
+        });
+    };
+
+    const resetFilters = () => {
+        setActiveFilter({ tags: [], status: [], search: '' });
+    };
+
     return (
         <AppDataContext.Provider value={{
             categories,
             emails,
             activeFilter,
             setFilter: setActiveFilter,
+            toggleTagFilter,
+            toggleStatusFilter,
+            resetFilters,
             addCategory,
             updateCategory,
             deleteCategory,

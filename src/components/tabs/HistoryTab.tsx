@@ -1,15 +1,18 @@
 import { useState } from 'react';
-import { Search, Filter, Calendar, User, Tag, Eye, Clock, ChevronDown, X } from 'lucide-react';
+import { Search, Calendar, User, Tag, Eye, X, Filter, Folder, Hash } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from '@/components/ui/command';
 import {
   Popover,
   PopoverContent,
@@ -34,8 +37,9 @@ import { cn } from '@/lib/utils';
 import { EmailHistoryItem, EmailHistoryStatus } from '@/types/history';
 import { format } from 'date-fns';
 import { useAppData } from '@/contexts/AppDataContext';
+import { Check } from 'lucide-react';
 
-const statusConfig: Record<EmailHistoryStatus, { label: string; className: string }> = {
+const statusConfig: Record<EmailHistoryStatus, { label: string; className: string; icon?: any }> = {
   draft: { label: 'Draft', className: 'bg-muted text-muted-foreground' },
   ready: { label: 'Ready', className: 'bg-success-muted text-success' },
   sent: { label: 'Sent', className: 'bg-primary/10 text-primary' },
@@ -43,10 +47,9 @@ const statusConfig: Record<EmailHistoryStatus, { label: string; className: strin
 };
 
 export function HistoryTab() {
-  const { emails, activeFilter, setFilter, categories } = useAppData();
+  const { emails, activeFilter, setFilter, categories, toggleTagFilter, toggleStatusFilter, resetFilters } = useAppData();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
   const [authorFilter, setAuthorFilter] = useState<string>('all');
   const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({});
   const [selectedEmail, setSelectedEmail] = useState<EmailHistoryItem | null>(null);
@@ -55,33 +58,48 @@ export function HistoryTab() {
   const allAuthors = Array.from(new Set(emails.map(e => e.author)));
 
   const filteredEmails = emails.filter(email => {
-    // 1. Context Filter (Sidebar)
-    const matchesContextFilter =
-      activeFilter.type === 'all'
-        ? true
-        : activeFilter.type === 'tag'
-          ? email.tags.includes(activeFilter.value)
-          : activeFilter.type === 'status'
-            ? email.status === activeFilter.value
-            : true;
+    // 1. Tags Filter (OR logic within, AND across categories if we wanted, but here it's just a flat list of active tags. 
+    // Usually faceted search is OR within a category, AND across categories. 
+    // For now, let's say if ANY tag matches, it shows? Or ALL? 
+    // Reviewing sidebar logic: it was just "includes". 
+    // Let's implement: Active Tags must be present (AND logic for tags? or OR?)
+    // E-commerce usually: "Brand: Nike OR Adidas". 
+    // Let's stick to: If tags selected, email must have AT LEAST ONE of selected tags? 
+    // Or if I select "Newsletter", I want newsletters. If I select "Newsletter" AND "Fashion", do I want emails that are BOTH? 
+    // Sidebar behavior was: click a tag -> show emails with that tag.
+    // If I click another tag, it adds to list. 
+    // Let's go with OR logic for tags, AND logic for Status+Tags.
+    // Actually, widespread pattern is OR within same attribute (e.g. status), AND across different attributes.
 
-    // 2. Local Filters
-    const matchesSearch = email.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || email.status === statusFilter;
-    const matchesAuthor = authorFilter === 'all' || email.author === authorFilter;
+    // BUT, since we have only one "Tags" filter in context for now (flat list), let's say OR.
+    // Wait, the context `toggleTagFilter` adds to a list.
+    // Let's assume standard faceted navigation:
+    // Status: Ready OR Sent
+    // AND
+    // Tags: Newsletter OR Promo
+
+    // Status Filter
+    const matchesStatus = activeFilter.status.length === 0 || activeFilter.status.includes(email.status);
+
+    // Tags Filter
+    const matchesTags = activeFilter.tags.length === 0 || email.tags.some(tag => activeFilter.tags.includes(tag));
+
+    // Search Filter
+    // We moved search to context or local? Context has `search`. 
+    // But `HistoryTab` had local `searchQuery`. 
+    // Let's use local search for now or sync with context if we want global search.
+    // The plan said "search: string" in FilterState. Let's use that.
+    const matchesSearch = activeFilter.search
+      ? email.name.toLowerCase().includes(activeFilter.search.toLowerCase())
+      : true;
+
+
+    // Local Date Filter
     const matchesDateFrom = !dateRange.from || email.createdAt >= dateRange.from;
     const matchesDateTo = !dateRange.to || email.createdAt <= dateRange.to;
 
-    return matchesContextFilter && matchesSearch && matchesStatus && matchesAuthor && matchesDateFrom && matchesDateTo;
+    return matchesStatus && matchesTags && matchesSearch && matchesDateFrom && matchesDateTo;
   });
-
-  const clearFilters = () => {
-    setSearchQuery('');
-    setStatusFilter('all');
-    setAuthorFilter('all');
-    setDateRange({});
-    setFilter({ type: 'all', value: '' }); // Clear sidebar filter too
-  };
 
   const getTagColor = (tagName: string) => {
     const category = categories.find(c => c.tags.some(t => t.name === tagName));
@@ -89,12 +107,17 @@ export function HistoryTab() {
   };
 
   const hasActiveFilters =
-    searchQuery ||
-    statusFilter !== 'all' ||
-    authorFilter !== 'all' ||
+    activeFilter.search ||
+    activeFilter.status.length > 0 ||
+    activeFilter.tags.length > 0 ||
     dateRange.from ||
-    dateRange.to ||
-    activeFilter.type !== 'all';
+    dateRange.to;
+
+  // Helper to clear all
+  const clearAllFilters = () => {
+    resetFilters();
+    setDateRange({});
+  };
 
   return (
     <div className="flex-1 flex flex-col bg-background">
@@ -109,18 +132,41 @@ export function HistoryTab() {
               </p>
             </div>
             {/* Active Filter Indicator */}
-            {activeFilter.type === 'tag' && (
+            {hasActiveFilters && (
               <div className="flex items-center gap-2 bg-primary/5 px-4 py-2 rounded-full border border-primary/20 animate-in fade-in slide-in-from-top-2">
-                <span className="text-xs font-semibold text-primary uppercase tracking-wide">Active Filter:</span>
-                <Badge variant="secondary" className="gap-1 pl-1.5 pr-2.5 bg-background shadow-sm border border-border/50">
-                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getTagColor(activeFilter.value) || 'currentColor' }} />
-                  {activeFilter.value}
-                </Badge>
+                <span className="text-xs font-semibold text-primary uppercase tracking-wide">Active:</span>
+
+                {/* Status Badges */}
+                {activeFilter.status.map(status => (
+                  <Badge key={status} variant="secondary" className={cn("gap-1 pl-1.5 pr-2.5 shadow-sm border border-border/50", statusConfig[status].className)}>
+                    {statusConfig[status].label}
+                  </Badge>
+                ))}
+
+                {/* Tag Badges */}
+                {activeFilter.tags.map(tag => (
+                  <Badge key={tag} variant="secondary" className="gap-1 pl-1.5 pr-2.5 bg-background shadow-sm border border-border/50">
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getTagColor(tag) || 'currentColor' }} />
+                    {tag}
+                  </Badge>
+                ))}
+
+                {/* Date Badge */}
+                {(dateRange.from || dateRange.to) && (
+                  <Badge variant="secondary" className="gap-1 pl-1.5 pr-2.5 bg-background shadow-sm border border-border/50">
+                    <Calendar className="w-3 h-3 text-muted-foreground" />
+                    {dateRange.from ? format(dateRange.from, 'MMM d') : ''}
+                    {dateRange.to ? ` - ${format(dateRange.to, 'MMM d')}` : ''}
+                  </Badge>
+                )}
+
+                <Separator orientation="vertical" className="h-4 mx-1" />
+
                 <Button
                   variant="ghost"
                   size="icon"
                   className="h-5 w-5 rounded-full hover:bg-destructive/10 hover:text-destructive -mr-1"
-                  onClick={() => setFilter({ type: 'all', value: '' })}
+                  onClick={clearAllFilters}
                 >
                   <X className="w-3 h-3" />
                 </Button>
@@ -139,44 +185,246 @@ export function HistoryTab() {
             <Input
               placeholder="Search by email name..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setFilter({ ...activeFilter, search: e.target.value });
+              }}
               className="pl-9"
             />
           </div>
 
-          {/* Status Filter */}
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="draft">Draft</SelectItem>
-              <SelectItem value="ready">Ready</SelectItem>
-              <SelectItem value="sent">Sent</SelectItem>
-              <SelectItem value="archived">Archived</SelectItem>
-            </SelectContent>
-          </Select>
+          {/* Tags Filter */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="border-dashed">
+                <Tag className="mr-2 h-4 w-4" />
+                Tags
+                {activeFilter.tags.length > 0 && (
+                  <>
+                    <Separator orientation="vertical" className="mx-2 h-4" />
+                    <Badge variant="secondary" className="rounded-sm px-1 font-normal lg:hidden">
+                      {activeFilter.tags.length}
+                    </Badge>
+                    <div className="hidden space-x-1 lg:flex">
+                      {activeFilter.tags.length > 2 ? (
+                        <Badge variant="secondary" className="rounded-sm px-1 font-normal">
+                          {activeFilter.tags.length} selected
+                        </Badge>
+                      ) : (
+                        activeFilter.tags.map((tag) => (
+                          <Badge
+                            variant="secondary"
+                            key={tag}
+                            className="rounded-sm px-1 font-normal"
+                          >
+                            {tag}
+                          </Badge>
+                        ))
+                      )}
+                    </div>
+                  </>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[200px] p-0" align="start">
+              <Command>
+                <CommandInput placeholder="Tags" />
+                <CommandList>
+                  <CommandEmpty>No results found.</CommandEmpty>
+                  {categories.map((category) => (
+                    <CommandGroup key={category.id} heading={category.name}>
+                      {category.tags.map((tag) => {
+                        const isSelected = activeFilter.tags.includes(tag.name);
+                        return (
+                          <CommandItem
+                            key={tag.id}
+                            onSelect={() => toggleTagFilter(tag.name)}
+                          >
+                            <div
+                              className={cn(
+                                "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
+                                isSelected
+                                  ? "bg-primary text-primary-foreground"
+                                  : "opacity-50 [&_svg]:invisible"
+                              )}
+                            >
+                              <Check className={cn("h-4 w-4")} />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: category.color }} />
+                              <span>{tag.name}</span>
+                            </div>
+                          </CommandItem>
+                        );
+                      })}
+                    </CommandGroup>
+                  ))}
+                  {activeFilter.tags.length > 0 && (
+                    <>
+                      <CommandSeparator />
+                      <CommandGroup>
+                        <CommandItem
+                          onSelect={() => setFilter({ ...activeFilter, tags: [] })}
+                          className="justify-center text-center"
+                        >
+                          Clear filters
+                        </CommandItem>
+                      </CommandGroup>
+                    </>
+                  )}
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
 
-          {/* Author Filter */}
-          <Select value={authorFilter} onValueChange={setAuthorFilter}>
-            <SelectTrigger className="w-[160px]">
-              <User className="w-4 h-4 mr-2 text-muted-foreground" />
-              <SelectValue placeholder="Author" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Authors</SelectItem>
-              {allAuthors.map(author => (
-                <SelectItem key={author} value={author}>{author}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {/* Status Filter */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="border-dashed">
+                <Filter className="mr-2 h-4 w-4" />
+                Status
+                {activeFilter.status.length > 0 && (
+                  <>
+                    <Separator orientation="vertical" className="mx-2 h-4" />
+                    <Badge variant="secondary" className="rounded-sm px-1 font-normal lg:hidden">
+                      {activeFilter.status.length}
+                    </Badge>
+                    <div className="hidden space-x-1 lg:flex">
+                      {activeFilter.status.length > 2 ? (
+                        <Badge variant="secondary" className="rounded-sm px-1 font-normal">
+                          {activeFilter.status.length} selected
+                        </Badge>
+                      ) : (
+                        activeFilter.status.map((status) => (
+                          <Badge
+                            variant="secondary"
+                            key={status}
+                            className="rounded-sm px-1 font-normal"
+                          >
+                            {statusConfig[status].label}
+                          </Badge>
+                        ))
+                      )}
+                    </div>
+                  </>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[200px] p-0" align="start">
+              <Command>
+                <CommandInput placeholder="Status" />
+                <CommandList>
+                  <CommandEmpty>No results found.</CommandEmpty>
+                  <CommandGroup>
+                    {Object.entries(statusConfig).map(([status, config]) => {
+                      const isSelected = activeFilter.status.includes(status as EmailHistoryStatus);
+                      return (
+                        <CommandItem
+                          key={status}
+                          onSelect={() => toggleStatusFilter(status as EmailHistoryStatus)}
+                        >
+                          <div
+                            className={cn(
+                              "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
+                              isSelected
+                                ? "bg-primary text-primary-foreground"
+                                : "opacity-50 [&_svg]:invisible"
+                            )}
+                          >
+                            <Check className={cn("h-4 w-4")} />
+                          </div>
+                          <span className={config.className + " px-2 py-0.5 rounded-sm text-xs"}>{config.label}</span>
+                        </CommandItem>
+                      );
+                    })}
+                  </CommandGroup>
+                  {activeFilter.status.length > 0 && (
+                    <>
+                      <CommandSeparator />
+                      <CommandGroup>
+                        <CommandItem
+                          onSelect={() => setFilter({ ...activeFilter, status: [] })}
+                          className="justify-center text-center"
+                        >
+                          Clear filters
+                        </CommandItem>
+                      </CommandGroup>
+                    </>
+                  )}
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+
+          {/* Author Filter (Local) */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="border-dashed">
+                <User className="mr-2 h-4 w-4" />
+                Author
+                {authorFilter !== 'all' && (
+                  <>
+                    <Separator orientation="vertical" className="mx-2 h-4" />
+                    <Badge variant="secondary" className="rounded-sm px-1 font-normal">
+                      {authorFilter}
+                    </Badge>
+                  </>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[200px] p-0" align="start">
+              <Command>
+                <CommandInput placeholder="Author" />
+                <CommandList>
+                  <CommandEmpty>No results found.</CommandEmpty>
+                  <CommandGroup>
+                    <CommandItem
+                      onSelect={() => setAuthorFilter('all')}
+                    >
+                      <div
+                        className={cn(
+                          "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
+                          authorFilter === 'all'
+                            ? "bg-primary text-primary-foreground"
+                            : "opacity-50 [&_svg]:invisible"
+                        )}
+                      >
+                        <Check className={cn("h-4 w-4")} />
+                      </div>
+                      All Authors
+                    </CommandItem>
+                    {allAuthors.map((author) => {
+                      const isSelected = authorFilter === author;
+                      return (
+                        <CommandItem
+                          key={author}
+                          onSelect={() => setAuthorFilter(isSelected ? 'all' : author)}
+                        >
+                          <div
+                            className={cn(
+                              "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
+                              isSelected
+                                ? "bg-primary text-primary-foreground"
+                                : "opacity-50 [&_svg]:invisible"
+                            )}
+                          >
+                            <Check className={cn("h-4 w-4")} />
+                          </div>
+                          {author}
+                        </CommandItem>
+                      );
+                    })}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
 
           {/* Date Range */}
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="outline" className="w-[180px] justify-start text-left font-normal">
-                <Calendar className="w-4 h-4 mr-2 text-muted-foreground" />
+              <Button variant="outline" className={cn("justify-start text-left font-normal", !dateRange.from && "text-muted-foreground")}>
+                <Calendar className="w-4 h-4 mr-2" />
                 {dateRange.from ? (
                   dateRange.to ? (
                     <span className="text-sm">{format(dateRange.from, 'MMM d')} - {format(dateRange.to, 'MMM d')}</span>
@@ -184,7 +432,7 @@ export function HistoryTab() {
                     <span className="text-sm">From {format(dateRange.from, 'MMM d')}</span>
                   )
                 ) : (
-                  <span className="text-muted-foreground">Date range</span>
+                  <span>Date range</span>
                 )}
               </Button>
             </PopoverTrigger>
@@ -198,13 +446,6 @@ export function HistoryTab() {
               />
             </PopoverContent>
           </Popover>
-
-          {/* Clear Filters */}
-          {hasActiveFilters && (
-            <Button variant="ghost" size="sm" onClick={clearFilters} className="text-muted-foreground">
-              Clear filters
-            </Button>
-          )}
         </div>
       </div>
 
